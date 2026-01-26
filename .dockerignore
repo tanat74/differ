@@ -5,7 +5,6 @@ Dockerfile
 content/
 node_modules/
 public/
-sql/
 tmp/
 volumes/
 .env

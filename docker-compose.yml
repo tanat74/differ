@@ -1,20 +1,34 @@
 services:
-  app:
-    build: .
-    env_file: .env
-    restart: unless-stopped
+  differ:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: differ
     ports:
-      - '3000:3000'
+      - "3100:3000"
+    restart: unless-stopped
     depends_on:
       - db
+    networks:
+      - differ_network
+    env_file: .env
+
   db:
     build:
       context: .
       dockerfile: Dockerfile.db
+    container_name: differ_db
     env_file: .env
-    restart: unless-stopped
     volumes:
       - db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - differ_network
 
 volumes:
   db_data:
+    driver: local
+
+networks:
+  differ_network:
+    driver: bridge
