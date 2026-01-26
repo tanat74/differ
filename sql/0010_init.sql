@@ -1,6 +1,7 @@
 CREATE TABLE
     IF NOT EXISTS items (
         id BIGSERIAL PRIMARY KEY,
+        slug VARCHAR(10) UNIQUE NOT NULL,
         created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         title VARCHAR(64),
         data BYTEA NOT NULL

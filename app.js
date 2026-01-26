@@ -4,6 +4,7 @@ const express = require('express')
 const logger = require('morgan')
 const path = require('path')
 
+const config = require('./lib/config')
 const { getBundles } = require('./lib/static')
 const indexRouter = require('./routes/index')
 const systemRouter = require('./routes/system')
@@ -30,6 +31,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 const bundles = getBundles()
 app.use(function (req, res, next) {
   res.locals.bundles = bundles
+  res.locals.basePath = config.BASE_PATH
   next()
 })
 

@@ -5,13 +5,15 @@ html
       title DIƒƒER
       link(rel='icon' href='icon.svg' sizes='any' type='images/svg+xml')
       - if (typeof bundles === 'object' && bundles.css) {
-      link(rel='stylesheet' href=`/css/${bundles.css}`)
+      link(rel='stylesheet' href=`css/${bundles.css}`)
       - }
+      script
+        | window.BASE_PATH = '#{basePath}';
   body
     block content
 
     include modal.html
 
     - if (typeof bundles === 'object' && bundles.js) {
-    script(src=`/js/${bundles.js}`)
+    script(src=`js/${bundles.js}`)
     - }

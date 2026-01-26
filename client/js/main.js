@@ -189,7 +189,8 @@
   }
 
   App.prototype.getUrl = function () {
-    return this.state.id ? window.location.origin + '/' + this.state.id : null
+    const basePath = window.BASE_PATH.endsWith('/') ? window.BASE_PATH : window.BASE_PATH + '/'
+    return this.state.id ? window.location.origin + basePath + this.state.id : null
   }
 
   App.prototype.copyUrl = async function (e) {
@@ -214,8 +215,11 @@
     this.ui.title.value = this.state.title
     this.ui.fileA.value = fileA
     this.ui.fileB.value = fileB
-    this.state.id = null
-    this.state.data = null
+    // Пересчитываем data из текущих файлов
+    const diff = Diff.createTwoFilesPatch('fileA', 'fileB', fileA, fileB, 'old', 'new', { context: Infinity })
+    this.state.data = buffer
+      .Buffer(pako.deflate(diff))
+      .toString('hex')
     this.state.diff = null
   }
 
@@ -226,9 +230,7 @@
       this.ui.form.hide()
       this.ui.compare.hide()
       this.ui.edit.show()
-      if (!this.state.id) {
-        this.ui.save.show()
-      }
+      this.ui.save.show()
     } else if (mode === VIEW_MODE_EDIT) {
       this.ui.diff.hide()
       this.ui.form.show()
@@ -256,13 +258,16 @@
 
   App.prototype.save = function () {
     this.ui.save.disabled = true
-    // this.ui.loader.show()
     const body = {
       title: this.state.title,
       data: this.state.data,
     }
-    fetch('/api/save', {
-      method: 'POST',
+    
+    const method = this.state.id ? 'PUT' : 'POST'
+    const url = this.state.id ? `api/save/${this.state.id}` : 'api/save'
+    
+    fetch(url, {
+      method: method,
       body: JSON.stringify(body),
       headers: { 'content-type': 'application/json' },
     })
@@ -273,7 +278,11 @@
         }
         this.state.id = data.id
         this.ui.save.hide()
-        window.location.href = '/' + data.id
+        if (method === 'POST') {
+          window.location.href = data.id
+        } else {
+          window.location.reload()
+        }
       })
       .catch((err) => {
         this.error(err)

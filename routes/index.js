@@ -2,7 +2,6 @@ const express = require('express')
 const createError = require('http-errors')
 const db = require('../lib/db')
 const { exec } = require('../lib/exec')
-const { encode, decode } = require('../lib/key')
 const { getUrl } = require('../lib/url')
 const { getPagedResponse } = require('../lib/paging')
 const { formatDataSize } = require('../lib/format')
@@ -13,13 +12,15 @@ router.get('/', function (req, res, next) {
   res.render('index', { context: '{}' })
 })
 
-router.get('/:key', async function (req, res, next) {
+router.get('/:slug', async function (req, res, next) {
   try {
-    const id = decode(req.params.key)
-    const item = await db.load(id)
+    const item = await db.load(req.params.slug)
+    if (!item) {
+      return next(createError(404))
+    }
     res.render('index', {
       context: JSON.stringify({
-        id: req.params.key,
+        id: req.params.slug,
         created: item.created,
         title: item.title,
         data: Buffer.from(item.data).toString('hex'),
@@ -33,14 +34,30 @@ router.get('/:key', async function (req, res, next) {
 router.post('/api/save', async function (req, res, next) {
   const data = req.body.data
   const title = req.body.title
-  let id
+  let slug
   try {
-    id = await db.save(data, title)
+    slug = await db.save(data, title)
   } catch (e) {
     return res.status(500).json({ error: e })
   }
-  const result = { id: encode(id) }
+  const result = { id: slug }
   res.status(201).json(result)
+})
+
+router.put('/api/save/:slug', async function (req, res, next) {
+  const slug = req.params.slug
+  const data = req.body.data
+  const title = req.body.title
+  try {
+    const updated = await db.update(slug, data, title)
+    if (!updated) {
+      return res.status(404).json({ error: 'Not found' })
+    }
+  } catch (e) {
+    return res.status(500).json({ error: e })
+  }
+  const result = { id: slug }
+  res.status(200).json(result)
 })
 
 router.get('/api/stats', async function (req, res, next) {
@@ -54,7 +71,7 @@ router.get('/api/list', async function (req, res, next) {
   const limit = Math.min(+req.query.limit || 100, 100)
   const offset = +req.query.offset || 0
   const [items, total] = await db.list(limit, offset)
-  const data = items.map((x) => getUrl(req, encode(x)))
+  const data = items.map((x) => getUrl(req, x))
   res.json(getPagedResponse(req, limit, offset, data, total))
 })
 

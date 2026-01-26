@@ -1,4 +1,4 @@
-FROM node:20-alpine3.18 AS base
+FROM node:22-alpine AS base
 ENV HOME=/app
 WORKDIR /app
 
@@ -17,7 +17,7 @@ RUN set -x \
     && npm install --omit dev \
     && rm -r /app/.npm
 
-FROM node:20-alpine3.18
+FROM node:22-alpine
 
 ARG GIT_BRANCH=local
 ARG GIT_COMMIT=local
