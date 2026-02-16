@@ -54,6 +54,12 @@
       modalContent: $('#modal-1-content'),
       modalTitle: $('#modal-1-title'),
       title: $('input#title'),
+      diffNav: $('.diff-nav'),
+      diffNavFirst: $('.diff-nav-first'),
+      diffNavPrev: $('.diff-nav-prev'),
+      diffNavCounter: $('.diff-nav-counter'),
+      diffNavNext: $('.diff-nav-next'),
+      diffNavLast: $('.diff-nav-last'),
     }
 
     this.state = {
@@ -62,6 +68,11 @@
       title: _context.title || null,
       data: _context.data || null,
       diff: null,
+      changeBlocks: [],
+      currentBlockIndex: -1,
+      isAutoScrolling: false,
+      autoScrollTimer: null,
+      scrollSyncRaf: 0,
     }
 
     function compareHandler() {
@@ -69,6 +80,7 @@
         _app.compare()
         _app.render()
         _app.toggleView(VIEW_MODE_DIFF)
+        _app.scrollToFirstChangeOrTop()
       } catch (e) {
         _app.error(e.message)
       }
@@ -90,10 +102,34 @@
       _app.save()
     }
 
+    this.ui.diffNavFirst.onclick = function () {
+      _app.goToChangeBlock(0)
+    }
+
+    this.ui.diffNavPrev.onclick = function () {
+      _app.goToChangeBlock(_app.state.currentBlockIndex - 1)
+    }
+
+    this.ui.diffNavNext.onclick = function () {
+      _app.goToChangeBlock(_app.state.currentBlockIndex + 1)
+    }
+
+    this.ui.diffNavLast.onclick = function () {
+      _app.goToChangeBlock(_app.state.changeBlocks.length - 1)
+    }
+
     this.ui.form.onsubmit = function (e) {
       e.preventDefault()
       compareHandler()
     }
+
+    window.addEventListener(
+      'scroll',
+      function () {
+        _app.scheduleScrollSync()
+      },
+      { passive: true }
+    )
   }
 
   App.prototype.compare = function () {
@@ -143,11 +179,12 @@
     diff2htmlUi.draw()
     diff2htmlUi.highlightCode()
     this.setDiffInfo()
+    this.refreshDiffNavigation()
   }
 
   App.prototype.setDiffInfo = function () {
     const header = $('.d2h-file-header')
-    const title = this.state.title || 'Untitled'
+    const title = this.state.title || 'Название сравнения'
     let copyButton = false
     let html = `<div class="diff-info">`
 
@@ -188,6 +225,204 @@
     }
   }
 
+  App.prototype.collectChangeBlocks = function () {
+    const changedRows = []
+    const fileWrappers = [...this.ui.diff.querySelectorAll('.d2h-file-wrapper')]
+
+    for (const fileWrapper of fileWrappers) {
+      const leftTbody = fileWrapper.querySelector(
+        '.d2h-file-side-diff .d2h-diff-tbody'
+      )
+      if (!leftTbody) {
+        continue
+      }
+
+      const rows = [...leftTbody.querySelectorAll('tr')]
+      for (const row of rows) {
+        const isChanged = !!row.querySelector(
+          '.d2h-del, .d2h-ins, .d2h-change, .d2h-emptyplaceholder, .d2h-code-side-emptyplaceholder'
+        )
+        if (isChanged) {
+          changedRows.push({ row, tbody: leftTbody })
+        }
+      }
+    }
+
+    if (!changedRows.length) {
+      return []
+    }
+
+    const blocks = []
+    let current = {
+      rows: [changedRows[0].row],
+      anchor: changedRows[0].row,
+      tbody: changedRows[0].tbody,
+      lastRow: changedRows[0].row,
+    }
+
+    for (let i = 1; i < changedRows.length; i++) {
+      const item = changedRows[i]
+      const sameTbody = item.tbody === current.tbody
+      const isConsecutive =
+        sameTbody &&
+        item.row !== current.lastRow &&
+        item.row.rowIndex === current.lastRow.rowIndex + 1
+
+      if (isConsecutive) {
+        current.rows.push(item.row)
+        current.lastRow = item.row
+        continue
+      }
+
+      blocks.push({
+        rows: current.rows,
+        anchor: current.anchor,
+      })
+
+      current = {
+        rows: [item.row],
+        anchor: item.row,
+        tbody: item.tbody,
+        lastRow: item.row,
+      }
+    }
+
+    blocks.push({
+      rows: current.rows,
+      anchor: current.anchor,
+    })
+
+    return blocks
+  }
+
+  App.prototype.updateDiffNavCounter = function () {
+    const total = this.state.changeBlocks.length
+    const current = total ? this.state.currentBlockIndex + 1 : 0
+    this.ui.diffNavCounter.textContent = `${current} / ${total}`
+
+    this.ui.diffNavFirst.disabled = !total || this.state.currentBlockIndex <= 0
+    this.ui.diffNavPrev.disabled = !total || this.state.currentBlockIndex <= 0
+    this.ui.diffNavNext.disabled =
+      !total || this.state.currentBlockIndex >= total - 1
+    this.ui.diffNavLast.disabled =
+      !total || this.state.currentBlockIndex >= total - 1
+  }
+
+  App.prototype.refreshDiffNavigation = function () {
+    this.state.changeBlocks = this.collectChangeBlocks()
+    this.state.currentBlockIndex = this.state.changeBlocks.length ? 0 : -1
+    this.updateDiffNavCounter()
+  }
+
+  App.prototype.scheduleScrollSync = function () {
+    if (this.ui.diff.classList.contains('hidden')) {
+      return
+    }
+
+    if (this.state.isAutoScrolling) {
+      return
+    }
+
+    if (this.state.scrollSyncRaf) {
+      return
+    }
+
+    this.state.scrollSyncRaf = window.requestAnimationFrame(() => {
+      this.state.scrollSyncRaf = 0
+      this.syncCurrentBlockByViewport()
+    })
+  }
+
+  App.prototype.syncCurrentBlockByViewport = function () {
+    const blocks = this.state.changeBlocks
+    if (!blocks.length) {
+      if (this.state.currentBlockIndex !== -1) {
+        this.state.currentBlockIndex = -1
+        this.updateDiffNavCounter()
+      }
+      return
+    }
+
+    const markerTop = Math.min(180, window.innerHeight * 0.25)
+    let bestIndex = 0
+    let bestDistance = Number.POSITIVE_INFINITY
+
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i]
+      if (!block || !block.anchor) {
+        continue
+      }
+      const distance = Math.abs(block.anchor.getBoundingClientRect().top - markerTop)
+      if (distance < bestDistance) {
+        bestDistance = distance
+        bestIndex = i
+      }
+    }
+
+    if (bestIndex !== this.state.currentBlockIndex) {
+      this.state.currentBlockIndex = bestIndex
+      this.updateDiffNavCounter()
+    }
+  }
+
+  App.prototype.goToChangeBlock = function (index) {
+    const total = this.state.changeBlocks.length
+    if (!total) {
+      this.state.currentBlockIndex = -1
+      this.updateDiffNavCounter()
+      return
+    }
+
+    const nextIndex = Math.max(0, Math.min(index, total - 1))
+    this.state.currentBlockIndex = nextIndex
+    this.updateDiffNavCounter()
+
+    const block = this.state.changeBlocks[nextIndex]
+    if (!block || !block.anchor) {
+      return
+    }
+
+    if (this.state.autoScrollTimer) {
+      clearTimeout(this.state.autoScrollTimer)
+    }
+    this.state.isAutoScrolling = true
+
+    block.anchor.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+      inline: 'nearest',
+    })
+
+    this.state.autoScrollTimer = setTimeout(() => {
+      this.state.isAutoScrolling = false
+      this.syncCurrentBlockByViewport()
+    }, 450)
+  }
+
+  App.prototype.scrollToFirstChangeOrTop = function () {
+    const firstBlock = this.state.changeBlocks[0]
+    if (firstBlock && firstBlock.anchor) {
+      this.goToChangeBlock(0)
+      return
+    }
+
+    const diffHeader = this.ui.diff.querySelector('.d2h-file-header')
+    if (diffHeader) {
+      diffHeader.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+        inline: 'nearest',
+      })
+      return
+    }
+
+    this.ui.diff.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+      inline: 'nearest',
+    })
+  }
+
   App.prototype.getUrl = function () {
     const basePath = window.BASE_PATH.endsWith('/') ? window.BASE_PATH : window.BASE_PATH + '/'
     return this.state.id ? window.location.origin + basePath + this.state.id : null
@@ -221,18 +456,24 @@
       .Buffer(pako.deflate(diff))
       .toString('hex')
     this.state.diff = null
+    this.state.changeBlocks = []
+    this.state.currentBlockIndex = -1
+    this.updateDiffNavCounter()
   }
 
   App.prototype.toggleView = function (mode) {
     // this.ui.loader.hide()
     if (mode == VIEW_MODE_DIFF) {
       this.ui.diff.show()
+      this.ui.diffNav.show()
       this.ui.form.hide()
       this.ui.compare.hide()
       this.ui.edit.show()
       this.ui.save.show()
+      this.updateDiffNavCounter()
     } else if (mode === VIEW_MODE_EDIT) {
       this.ui.diff.hide()
+      this.ui.diffNav.hide()
       this.ui.form.show()
       this.ui.compare.show()
       this.ui.edit.hide()

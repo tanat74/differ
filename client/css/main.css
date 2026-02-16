@@ -71,7 +71,14 @@ sup.version {
 /* CONTROLS */
 
 .controls {
+  display: flex;
+  align-items: center;
   margin-bottom: 4px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: #fff;
+  padding: 4px 0;
 }
 
 .controls button {
@@ -86,7 +93,10 @@ sup.version {
 /* MAIN FORM */
 
 input#title {
-  margin-bottom: 4px;
+  margin-left: 4px;
+  margin-bottom: 0;
+  min-width: 220px;
+  flex: 1;
 }
 
 .editor {
@@ -173,6 +183,44 @@ input#title {
 
 .modal__overlay {
   z-index: 5;
+}
+
+/* DIFF NAVIGATION */
+
+.diff-nav {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 8px 10px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.diff-nav button {
+  min-width: 40px;
+  border-radius: 6px;
+  padding: 6px 10px;
+  line-height: 1;
+}
+
+.diff-nav button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.diff-nav-counter {
+  font-family: monospace;
+  font-weight: 600;
+  min-width: 70px;
+  text-align: center;
+  user-select: none;
 }
 
 /* LOADER */

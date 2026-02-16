@@ -15,12 +15,18 @@ block content
         button.compare.hidden.pure-button(type='button') COMPARE
         button.edit.hidden.pure-button(type='button') EDIT
         button.save.hidden.pure-button(type='button') SAVE
+        input#title.shrink(type='text' maxlength=64 placeholder='Название сравнения')
 
       .diff.shrink.hidden
 
-      form#main.h100.flex-col.pure-form.hidden
+      .diff-nav.hidden
+        button.diff-nav-first.pure-button(type='button' aria-label='Первое изменение') ⏮
+        button.diff-nav-prev.pure-button(type='button' aria-label='Предыдущее изменение') ◀
+        span.diff-nav-counter 0 / 0
+        button.diff-nav-next.pure-button(type='button' aria-label='Следующее изменение') ▶
+        button.diff-nav-last.pure-button(type='button' aria-label='Последнее изменение') ⏭
 
-        input#title(type='text' maxlength=64 placeholder='Untitled').shrink
+      form#main.h100.flex-col.pure-form.hidden
 
         .grow
           .files.flex-row
